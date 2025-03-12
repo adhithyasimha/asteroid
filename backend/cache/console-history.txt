@@ -1,0 +1,5 @@
+await contract.decimals();
+console.log(await contract.getAddress());
+const contract = await IPFSStorage.attach(contractAddress);
+const IPFSStorage = await ethers.getContractFactory("IPFSStorage");
+const contractAddress = "0xe5dbCd2424409DABBb7fBD816ae57F341E4a9DdC";

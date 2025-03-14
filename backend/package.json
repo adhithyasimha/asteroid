@@ -8,7 +8,12 @@
   },
   "dependencies": {
     "dotenv": "^16.4.7",
-    "ipfs-http-client": "^56.0.2",
-    "kubo-rpc-client": "^5.1.0"
+    "express": "^4.21.2",
+    "fs": "^0.0.1-security",
+    "hardhat": "^2.22.19",
+    "ipfs-http-client": "^56.0.3",
+    "kubo-rpc-client": "^5.1.0",
+    "multer": "^1.4.5-lts.1",
+    "path": "^0.12.7"
   }
 }

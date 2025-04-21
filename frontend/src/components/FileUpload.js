@@ -16,12 +16,15 @@ const ipfsClient = create({
   },
 });
 
+// Near the top of your component file, with other constants
+const BACKEND_URL = "http://localhost:3000"; // Adjust port if your backend uses different port
+
 // Smart contract details
 const CONTRACT_ABI = [
-  // Your contract ABI
-  "function storeFile(string memory _cid, string memory _name, uint256 _size, string memory _fileType) public"
+  "function storeFile(string memory _cid, string memory _name, uint256 _size, string memory _fileType) public",
+  "function storeCID(string memory cid) public"
 ];
-const CONTRACT_ADDRESS = "0x..."; // Your contract address
+const CONTRACT_ADDRESS = "0x611EC2ea8c13c4F363E066382bECe9A553E531bc"; // Replace placeholder with actual address
 
 const FileUpload = () => {
   const [file, setFile] = useState(null);
@@ -122,6 +125,27 @@ const FileUpload = () => {
       setError(err.message || "Failed to upload file");
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!file) return;
+    
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      // Using the BACKEND_URL constant here
+      const response = await fetch(`${BACKEND_URL}/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      
+      const data = await response.json();
+      // Process CID and call smart contract
+      // ...
+    } catch (error) {
+      console.error("Error uploading file:", error);
     }
   };
   

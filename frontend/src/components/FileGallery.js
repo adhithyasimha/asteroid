@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ethers } from 'ethers';
+import { create } from 'ipfs-http-client';
 import './FileGallery.css';
 
 const FileGallery = () => {
@@ -7,41 +7,41 @@ const FileGallery = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  const CONTRACT_ADDRESS = "0x611EC2ea8c13c4F363E066382bECe9A553E531bc";
-  const CONTRACT_ABI = [
-    "function getUserFiles() public view returns (tuple(string cid, string name, uint256 size, string fileType, uint256 timestamp, address owner)[] memory)"
-  ];
-
+  const BACKEND_URL = "http://localhost:3001"; // Update to match your backend port
+  
+  // Initialize IPFS client (only for direct node interaction if needed)
+  const ipfs = create({
+    host: 'localhost',
+    port: 5001,
+    protocol: 'http'
+  });
+  
   useEffect(() => {
-    fetchFiles();
+    fetchIPFSFiles();
   }, []);
 
-  const fetchFiles = async () => {
+  const fetchIPFSFiles = async () => {
     try {
       setLoading(true);
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      setError(null);
       
-      const filesList = await contract.getUserFiles();
+      console.log("Fetching IPFS files from:", `${BACKEND_URL}/api/ipfs/files`);
+      const response = await fetch(`${BACKEND_URL}/api/ipfs/files`);
       
-      // Format the files data
-      const formattedFiles = filesList.map(file => {
-        return {
-          cid: file.cid,
-          name: file.name,
-          size: Number(file.size),
-          fileType: file.fileType,
-          timestamp: new Date(Number(file.timestamp) * 1000).toLocaleString(),
-          owner: file.owner
-        };
-      });
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Server error response:", errorText);
+        throw new Error(`Server responded with ${response.status}: ${errorText}`);
+      }
       
-      setFiles(formattedFiles);
+      const data = await response.json();
+      console.log("IPFS files:", data.files);
+      
+      setFiles(data.files || []);
       setLoading(false);
     } catch (err) {
-      console.error("Error fetching files:", err);
-      setError("Failed to load files. Make sure your wallet is connected.");
+      console.error("Error fetching IPFS files:", err);
+      setError(`Failed to load IPFS files: ${err.message}`);
       setLoading(false);
     }
   };
@@ -52,14 +52,17 @@ const FileGallery = () => {
     else return (bytes / 1048576).toFixed(1) + " MB";
   };
 
+  const viewFile = (cid) => {
+    const cleanCid = cid.trim();
+    window.open(`http://127.0.0.1:8080/ipfs/${cleanCid}`, '_blank');
+  };
+
   const downloadFile = async (cid, fileName) => {
     try {
-      // Use IPFS gateway to download the file
-      const url = `https://ipfs.io/ipfs/${cid}`;
+      const url = `http://127.0.0.1:8080/ipfs/${cid}`;
       const response = await fetch(url);
       const blob = await response.blob();
       
-      // Create download link
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
       link.download = fileName;
@@ -72,44 +75,105 @@ const FileGallery = () => {
     }
   };
 
+  // Helper function to determine if a CID is a file or directory and handle accordingly
+  async function getIPFSContent(ipfs, cid) {
+    try {
+      // Check if it's a directory first
+      const dirInfo = await ipfs.ls(cid);
+      // If we reach here without error, it's a directory
+      return {
+        isDirectory: true,
+        content: Array.from(dirInfo).map(item => ({
+          name: item.name,
+          cid: item.cid.toString(),
+          size: item.size,
+          type: item.type
+        }))
+      };
+    } catch (dirError) {
+      try {
+        // If ls fails, try cat as it might be a file
+        const chunks = [];
+        for await (const chunk of ipfs.cat(cid)) {
+          chunks.push(chunk);
+        }
+        const content = Buffer.concat(chunks).toString();
+        return {
+          isDirectory: false,
+          content: content
+        };
+      } catch (fileError) {
+        throw new Error(`Failed to retrieve IPFS content: ${fileError.message}`);
+      }
+    }
+  }
+
   return (
     <div className="file-gallery">
-      <h2>Your Files</h2>
+      <h2>IPFS Files</h2>
+      
       {loading ? (
-        <p>Loading files...</p>
+        <p className="loading">Loading files from IPFS...</p>
       ) : error ? (
-        <p className="error">{error}</p>
+        <div>
+          <p className="error">{error}</p>
+          <button onClick={fetchIPFSFiles} className="retry-btn">Retry</button>
+        </div>
       ) : files.length === 0 ? (
-        <p>No files found. Upload some files first!</p>
+        <p>No files found in IPFS. Upload some files first!</p>
       ) : (
-        <div className="files-container">
-          {files.map((file, index) => (
-            <div key={index} className="file-card">
-              <div className="file-icon">
-                {file.fileType.startsWith('image/') ? (
-                  <img src={`https://ipfs.io/ipfs/${file.cid}`} alt={file.name} className="file-preview" />
-                ) : (
-                  <i className="file-icon-generic">📄</i>
-                )}
-              </div>
-              <div className="file-details">
-                <h3 className="file-name">{file.name}</h3>
-                <p>Type: {file.fileType}</p>
-                <p>Size: {formatFileSize(file.size)}</p>
-                <p>Uploaded: {file.timestamp}</p>
-                <button 
-                  onClick={() => downloadFile(file.cid, file.name)}
-                  className="download-btn"
-                >
-                  Download
-                </button>
-              </div>
-            </div>
-          ))}
+        <div className="table-container">
+          <table className="files-table">
+            <thead>
+              <tr>
+                <th>File Name</th>
+                <th>CID</th>
+                <th>Type</th>
+                <th>Size</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {files.map((file, index) => (
+                <tr key={index}>
+                  <td>{file.name}</td>
+                  <td className="cid-cell">
+                    <span className="cid-text" title={file.cid}>{file.cid}</span>
+                    <button 
+                      onClick={() => navigator.clipboard.writeText(file.cid)}
+                      className="copy-btn" 
+                      title="Copy CID"
+                    >
+                      📋
+                    </button>
+                  </td>
+                  <td>{file.fileType}</td>
+                  <td>{formatFileSize(file.size)}</td>
+                  <td className="actions-cell">
+                    <button 
+                      onClick={() => downloadFile(file.cid, file.name)}
+                      className="download-btn"
+                      title="Download file"
+                    >
+                      ⬇️
+                    </button>
+                    <button 
+                      onClick={() => viewFile(file.cid)}
+                      className="view-btn"
+                      title="View file"
+                    >
+                      👁️
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
-      <button onClick={fetchFiles} className="refresh-btn">
-        Refresh Files
+      
+      <button onClick={fetchIPFSFiles} className="refresh-btn">
+        Refresh IPFS Files
       </button>
     </div>
   );

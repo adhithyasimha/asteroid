@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import WalletConnect from './WalletConnect';
-import logo from '../assets/asteriod-logo.png';
+import logo from '../assets/asteroid-logo.png';
 import homeIcon from '../assets/home-icon.svg';
 import fileIcon from '../assets/file-icon.svg';
 import aboutIcon from '../assets/about-icon.svg';

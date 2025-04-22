@@ -4,24 +4,21 @@ import { ethers } from 'ethers';
 import { Buffer } from 'buffer';  // Add this import
 
 // Configure IPFS client with your preferred gateway
-// Using Infura as an example
-const projectId = ''; // Your Infura IPFS project ID
-const projectSecret = ''; // Your Infura IPFS project secret
 const ipfsClient = create({
-  host: 'ipfs.infura.io',
+  host: 'localhost',
   port: 5001,
-  protocol: 'https',
-  headers: {
-    authorization: `Basic ${Buffer.from(`${projectId}:${projectSecret}`).toString('base64')}`,
-  },
+  protocol: 'http'
 });
+
+// Near the top of your component file, with other constants
+const BACKEND_URL = "http://localhost:3000"; // Make sure this matches your backend port
 
 // Smart contract details
 const CONTRACT_ABI = [
-  // Your contract ABI
-  "function storeFile(string memory _cid, string memory _name, uint256 _size, string memory _fileType) public"
+  "function storeFile(string memory _cid, string memory _name, uint256 _size, string memory _fileType) public",
+  "function storeCID(string memory cid) public"
 ];
-const CONTRACT_ADDRESS = "0x..."; // Your contract address
+const CONTRACT_ADDRESS = "0x611EC2ea8c13c4F363E066382bECe9A553E531bc"; // Replace placeholder with actual address
 
 const FileUpload = () => {
   const [file, setFile] = useState(null);
@@ -38,41 +35,9 @@ const FileUpload = () => {
     }
   };
 
-  const uploadToIPFS = async (file) => {
-    try {
-      // For demo purposes, simulate progress
-      const progressInterval = setInterval(() => {
-        setProgress(prev => {
-          const newProgress = prev + 5;
-          if (newProgress >= 90) clearInterval(progressInterval);
-          return newProgress > 90 ? 90 : newProgress;
-        });
-      }, 300);
-      
-      // Try uploading to IPFS (if you have proper credentials)
-      // If not using Infura IPFS, you may need to adjust this
-      const added = await ipfsClient.add(
-        file,
-        {
-          progress: (prog) => console.log(`received: ${prog}`)
-        }
-      );
-      
-      clearInterval(progressInterval);
-      setProgress(95);
-      
-      return added.path;
-    } catch (error) {
-      console.error("IPFS upload error:", error);
-      
-      // For demo purposes: If IPFS upload fails, simulate a successful upload
-      // In production, you should handle this error properly
-      return "QmXgZAUWd8yoCiRq8W1z4JAfxDWY8p2MH1bo1rbeTx7a";
-    }
-  };
-
-  const uploadFile = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    
     if (!file) return;
     
     setUploading(true);
@@ -81,42 +46,50 @@ const FileUpload = () => {
     setResult(null);
     
     try {
-      // 1. Upload to IPFS
-      const cid = await uploadToIPFS(file);
-      setProgress(95);
-      
-      // 2. Store reference on blockchain
-      if (window.ethereum) {
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const signer = await provider.getSigner();
-        const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
-        
-        // Call smart contract function to store CID
-        const tx = await contract.storeFile(
-          cid,
-          file.name,
-          file.size,
-          file.type
-        );
-        
-        setProgress(98);
-        
-        // Wait for transaction confirmation
-        await tx.wait();
-        setProgress(100);
-        
-        // Set result
-        setResult({
-          fileName: file.name,
-          fileSize: file.size,
-          fileType: file.type,
-          cid: cid,
-          txHash: tx.hash,
-          accessLink: `https://ipfs.io/ipfs/${cid}`
+      // Show upload progress
+      const progressInterval = setInterval(() => {
+        setProgress(prev => {
+          const newProgress = prev + 5;
+          if (newProgress >= 90) clearInterval(progressInterval);
+          return newProgress > 90 ? 90 : newProgress;
         });
-      } else {
-        throw new Error("Ethereum provider not found. Please install MetaMask.");
+      }, 300);
+      
+      // Upload directly to backend
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await fetch(`${BACKEND_URL}/api/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      
+      clearInterval(progressInterval);
+      
+      if (!response.ok) {
+        throw new Error(`Server responded with ${response.status}`);
       }
+      
+      const data = await response.json();
+      console.log("Server response:", data); // Debug log
+      setProgress(100);
+      
+      // More defensive approach to extract CID from response
+      const cid = data.cid || (data.data && data.data.cid) || "";
+      
+      if (!cid) {
+        throw new Error("No CID returned from server");
+      }
+      
+      // Set result with the CID from the server
+      setResult({
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        cid: cid,
+        txHash: (data.txHash || data.data?.txHash || "N/A"),
+        accessLink: `http://127.0.0.1:8080/ipfs/${cid}`
+      });
     } catch (err) {
       console.error("Error uploading file:", err);
       setError(err.message || "Failed to upload file");
@@ -124,7 +97,7 @@ const FileUpload = () => {
       setUploading(false);
     }
   };
-  
+
   const formatFileSize = (bytes) => {
     if (bytes < 1024) return bytes + ' bytes';
     else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
@@ -138,7 +111,7 @@ const FileUpload = () => {
         Files are stored on IPFS and references are saved on the blockchain.
       </p>
       
-      <form onSubmit={uploadFile} className="upload-form">
+      <form onSubmit={handleSubmit} className="upload-form">
         <div className="file-drop-area">
           <input 
             type="file" 

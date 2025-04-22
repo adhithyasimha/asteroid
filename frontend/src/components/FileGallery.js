@@ -1,181 +1,180 @@
 import React, { useState, useEffect } from 'react';
-import { ethers } from 'ethers';
-
-// Smart contract details
-const CONTRACT_ABI = [
-  // Your contract ABI
-  "function getUserFiles() public view returns (tuple(string cid, string name, uint256 size, string fileType, uint256 timestamp, address owner)[] memory)"
-];
-const CONTRACT_ADDRESS = "0x..."; // Your contract address
+import { create } from 'ipfs-http-client';
+import './FileGallery.css';
 
 const FileGallery = () => {
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [connected, setConnected] = useState(false);
+  
+  const BACKEND_URL = "http://localhost:3001"; // Update to match your backend port
+  
+  // Initialize IPFS client (only for direct node interaction if needed)
+  const ipfs = create({
+    host: 'localhost',
+    port: 5001,
+    protocol: 'http'
+  });
   
   useEffect(() => {
-    const checkConnection = async () => {
-      if (window.ethereum) {
-        try {
-          const accounts = await window.ethereum.request({
-            method: "eth_accounts"
-          });
-          if (accounts.length > 0) {
-            setConnected(true);
-            fetchUserFiles();
-          } else {
-            setLoading(false);
-            setConnected(false);
-          }
-        } catch (error) {
-          console.error('Error checking connection:', error);
-          setLoading(false);
-        }
-      } else {
-        setLoading(false);
-      }
-    };
-    
-    checkConnection();
-    
-    // Listen for account changes
-    if (window.ethereum) {
-      window.ethereum.on('accountsChanged', (accounts) => {
-        if (accounts.length > 0) {
-          setConnected(true);
-          fetchUserFiles();
-        } else {
-          setConnected(false);
-          setFiles([]);
-        }
-      });
-    }
-    
-    return () => {
-      if (window.ethereum) {
-        window.ethereum.removeAllListeners('accountsChanged');
-      }
-    };
+    fetchIPFSFiles();
   }, []);
-  
-  const fetchUserFiles = async () => {
+
+  const fetchIPFSFiles = async () => {
     try {
-      if (!window.ethereum) {
-        throw new Error("Ethereum wallet not found");
-      }
-      
       setLoading(true);
       setError(null);
       
-      // Using BrowserProvider for ethers v6
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      console.log("Fetching IPFS files from:", `${BACKEND_URL}/api/ipfs/files`);
+      const response = await fetch(`${BACKEND_URL}/api/ipfs/files`);
       
-      // Get user's files from the blockchain
-      const userFiles = await contract.getUserFiles();
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Server error response:", errorText);
+        throw new Error(`Server responded with ${response.status}: ${errorText}`);
+      }
       
-      // Format files for display
-      const formattedFiles = userFiles.map(file => ({
-        cid: file.cid,
-        name: file.name,
-        size: Number(file.size),
-        fileType: file.fileType,
-        timestamp: new Date(Number(file.timestamp) * 1000),
-        accessLink: `https://ipfs.io/ipfs/${file.cid}`
-      }));
+      const data = await response.json();
+      console.log("IPFS files:", data.files);
       
-      setFiles(formattedFiles);
+      setFiles(data.files || []);
+      setLoading(false);
     } catch (err) {
-      console.error("Error fetching files:", err);
-      setError(err.message || "Failed to load your files");
-    } finally {
+      console.error("Error fetching IPFS files:", err);
+      setError(`Failed to load IPFS files: ${err.message}`);
       setLoading(false);
     }
   };
-  
+
   const formatFileSize = (bytes) => {
-    if (bytes < 1024) return bytes + ' bytes';
-    else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
-    else return (bytes / 1048576).toFixed(1) + ' MB';
+    if (bytes < 1024) return bytes + " bytes";
+    else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+    else return (bytes / 1048576).toFixed(1) + " MB";
   };
-  
-  const formatDate = (date) => {
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+
+  const viewFile = (cid) => {
+    const cleanCid = cid.trim();
+    window.open(`http://127.0.0.1:8080/ipfs/${cleanCid}`, '_blank');
   };
-  
-  const getFileIcon = (fileType) => {
-    if (fileType.includes('image')) return '🖼️';
-    if (fileType.includes('video')) return '🎬';
-    if (fileType.includes('audio')) return '🎵';
-    if (fileType.includes('pdf')) return '📄';
-    if (fileType.includes('text')) return '📝';
-    if (fileType.includes('application/json')) return '📊';
-    return '📁';
-  };
-  
-  return (
-    <div className="files-gallery">
-      <div className="gallery-header">
-        <h2>My Stored Files</h2>
-        {connected && (
-          <button onClick={fetchUserFiles} className="refresh-button">
-            ↻ Refresh
-          </button>
-        )}
-      </div>
+
+  const downloadFile = async (cid, fileName) => {
+    try {
+      const url = `http://127.0.0.1:8080/ipfs/${cid}`;
+      const response = await fetch(url);
+      const blob = await response.blob();
       
-      {!connected ? (
-        <div className="connect-prompt">
-          <p>Please connect your wallet to view your files</p>
-        </div>
-      ) : loading ? (
-        <div className="loading-container">
-          <div className="spinner"></div>
-          <p>Loading your files...</p>
-        </div>
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error("Error downloading file:", err);
+      alert("Failed to download file");
+    }
+  };
+
+  // Helper function to determine if a CID is a file or directory and handle accordingly
+  async function getIPFSContent(ipfs, cid) {
+    try {
+      // Check if it's a directory first
+      const dirInfo = await ipfs.ls(cid);
+      // If we reach here without error, it's a directory
+      return {
+        isDirectory: true,
+        content: Array.from(dirInfo).map(item => ({
+          name: item.name,
+          cid: item.cid.toString(),
+          size: item.size,
+          type: item.type
+        }))
+      };
+    } catch (dirError) {
+      try {
+        // If ls fails, try cat as it might be a file
+        const chunks = [];
+        for await (const chunk of ipfs.cat(cid)) {
+          chunks.push(chunk);
+        }
+        const content = Buffer.concat(chunks).toString();
+        return {
+          isDirectory: false,
+          content: content
+        };
+      } catch (fileError) {
+        throw new Error(`Failed to retrieve IPFS content: ${fileError.message}`);
+      }
+    }
+  }
+
+  return (
+    <div className="file-gallery">
+      <h2>IPFS Files</h2>
+      
+      {loading ? (
+        <p className="loading">Loading files from IPFS...</p>
       ) : error ? (
-        <div className="error-message">
-          <span className="error-icon">⚠️</span>
-          {error}
+        <div>
+          <p className="error">{error}</p>
+          <button onClick={fetchIPFSFiles} className="retry-btn">Retry</button>
         </div>
       ) : files.length === 0 ? (
-        <div className="empty-state">
-          <div className="empty-icon">📂</div>
-          <h3>No files yet</h3>
-          <p>Upload your first file to see it here</p>
-        </div>
+        <p>No files found in IPFS. Upload some files first!</p>
       ) : (
-        <div className="files-grid">
-          {files.map(file => (
-            <div key={file.cid} className="file-card">
-              <div className="file-icon">
-                {getFileIcon(file.fileType)}
-              </div>
-              <div className="file-info">
-                <h3 className="file-name" title={file.name}>
-                  {file.name.length > 20 ? `${file.name.substring(0, 20)}...` : file.name}
-                </h3>
-                <p className="file-details">
-                  {formatFileSize(file.size)} • {formatDate(file.timestamp)}
-                </p>
-              </div>
-              <div className="file-actions">
-                <a href={file.accessLink} className="file-button" target="_blank" rel="noopener noreferrer">
-                  View
-                </a>
-              </div>
-            </div>
-          ))}
+        <div className="table-container">
+          <table className="files-table">
+            <thead>
+              <tr>
+                <th>File Name</th>
+                <th>CID</th>
+                <th>Type</th>
+                <th>Size</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {files.map((file, index) => (
+                <tr key={index}>
+                  <td>{file.name}</td>
+                  <td className="cid-cell">
+                    <span className="cid-text" title={file.cid}>{file.cid}</span>
+                    <button 
+                      onClick={() => navigator.clipboard.writeText(file.cid)}
+                      className="copy-btn" 
+                      title="Copy CID"
+                    >
+                      📋
+                    </button>
+                  </td>
+                  <td>{file.fileType}</td>
+                  <td>{formatFileSize(file.size)}</td>
+                  <td className="actions-cell">
+                    <button 
+                      onClick={() => downloadFile(file.cid, file.name)}
+                      className="download-btn"
+                      title="Download file"
+                    >
+                      ⬇️
+                    </button>
+                    <button 
+                      onClick={() => viewFile(file.cid)}
+                      className="view-btn"
+                      title="View file"
+                    >
+                      👁️
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
+      
+      <button onClick={fetchIPFSFiles} className="refresh-btn">
+        Refresh IPFS Files
+      </button>
     </div>
   );
 };

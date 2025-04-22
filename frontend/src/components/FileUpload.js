@@ -11,7 +11,7 @@ const ipfsClient = create({
 });
 
 // Near the top of your component file, with other constants
-const BACKEND_URL = "http://localhost:3000"; // Make sure this matches your backend port
+const BACKEND_URL = "http://localhost:3001"; // Make sure this matches your backend port
 
 // Smart contract details
 const CONTRACT_ABI = [

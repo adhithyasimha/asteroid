@@ -17,7 +17,7 @@ Asteroid is a decentralized file storage application that leverages **IPFS** for
 
 ### 1. Clone the Repository
 ```bash
-git clone <repository-url>
+git clone https://github.com/adhithyasimha/asteroid.git
 cd asteroid
 ```
 

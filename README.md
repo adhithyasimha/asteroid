@@ -1,4 +1,4 @@
-# <img src="https://github.com/user-attachments/assets/fca3c7ac-9e1f-42d4-9b1d-97333972615e" alt="logo" width="40"/> Asteroid - Decentralized File Storage DApp
+# <img src="https://github.com/user-attachments/assets/fca3c7ac-9e1f-42d4-9b1d-97333972615e" alt="logo" width="40"/> Asteroid - Decentralized File Storage
 
 
 Asteroid is a decentralized file storage application that leverages **IPFS** for storing files and **Ethereum blockchain** for managing storage payments and metadata. Users can upload files securely, pay for storage, and retrieve them without relying on centralized servers.

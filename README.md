@@ -5,6 +5,10 @@ Asteroid is a decentralized file storage application that leverages **IPFS** for
 
 ---
 
+## UI
+
+<img width="1236" height="723" alt="Screenshot 2025-07-18 at 5 41 27 PM" src="https://github.com/user-attachments/assets/b6a1f3df-9e80-44a0-ac93-b5fc4ad4d2b4" />
+
 
 ## Features
 - Upload files to a decentralized network using IPFS.
